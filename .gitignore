@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+
+# Environments
+.venv/
+env/
+venv/
+/log_file.txt
+/.idea/.gitignore
+/discord_sponsors.txt
+/.idea/LERK_bot.iml
+/.idea/material_theme_project_new.xml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/roles_id.txt
+/.idea/vcs.xml
+/disposable.txt
+!/CLAUDE.md

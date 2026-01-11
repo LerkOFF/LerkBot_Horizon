@@ -1,12 +1,11 @@
 from datetime import datetime
 import discord
-from discord import Option
 from config import TRACKED_ROLES, CKEY_CHANNEL_ID, SPONSORS_FILE_PATH, CAN_GIVES_ROLES, DISPOSABLE_FILE_PATH
 import re
 from logger import log_user_action
 
 
-async def my_ckey(ctx: discord.ApplicationContext, ckey: Option(str, "Ваш сикей в игре")):
+async def my_ckey(ctx: discord.ApplicationContext, ckey: discord.Option(str, "Ваш сикей в игре")):
     try:
         ckey_channel = ctx.guild.get_channel(CKEY_CHANNEL_ID)
         if ckey_channel is None:
@@ -91,7 +90,7 @@ async def my_ckey(ctx: discord.ApplicationContext, ckey: Option(str, "Ваш с�
         raise
 
 
-async def change_my_name_color(ctx: discord.ApplicationContext, color_hex: Option(str, "HEX-код цвета")):
+async def change_my_name_color(ctx: discord.ApplicationContext, color_hex: discord.Option(str, "HEX-код цвета")):
     try:
         ckey_channel = ctx.guild.get_channel(CKEY_CHANNEL_ID)
         if ckey_channel is None:
@@ -153,8 +152,8 @@ async def change_my_name_color(ctx: discord.ApplicationContext, color_hex: Optio
         log_user_action(f'Error changing color: {e}', member)
 
 
-async def add_disposable(ctx: discord.ApplicationContext, ds_nickname: Option(str, "Дискорд никнейм пользователя"),
-                         slots: Option(int, "Количество слотов"), tokens: Option(int, "Количество токенов")):
+async def add_disposable(ctx: discord.ApplicationContext, ds_nickname: discord.Option(str, "Дискорд никнейм пользователя"),
+                         slots: discord.Option(int, "Количество слотов"), tokens: discord.Option(int, "Количество токенов")):
     try:
         if ctx.author.name not in CAN_GIVES_ROLES:
             await ctx.respond("У вас нет прав на выполнение этой команды.", ephemeral=True)

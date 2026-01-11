@@ -21,3 +21,7 @@ venv/
 /.idea/vcs.xml
 /disposable.txt
 !/CLAUDE.md
+
+# Logs and Claude
+logs.txt
+.claude/

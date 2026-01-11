@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 def _get_env(key: str, required: bool = True) -> str:
     """Безопасное получение переменной окружения с проверкой."""
     value = os.getenv(key)

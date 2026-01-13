@@ -296,7 +296,7 @@ async def roll(ctx: discord.ApplicationContext, dice: discord.Option(str, "Фо�
             modifier_sign = "+" if modifier > 0 else ""
             result_text += f" {modifier_sign}{modifier} = **{total}**"
 
-        response = f"🎲 {ctx.author.mention} бросает {dice}:\n{result_text}"
+        response = f"🎲 {ctx.author.mention} бросает {dice}:\n# {result_text}\n"
 
         await ctx.respond(response)
         log_user_action(f'Roll command used: {dice} = {total}', ctx.author)

@@ -66,6 +66,45 @@ class SS14Database:
             logger.error(f"Ошибка при получении топа игроков: {e}")
             raise
 
+    async def get_top_players_by_balance(self, limit: int = 10):
+        """
+        Получить топ игроков по балансу банковского счета.
+
+        Args:
+            limit: количество игроков в топе (по умолчанию 10)
+
+        Returns:
+            Список кортежей (user_name, char_name, bank_balance)
+        """
+        if not self.pool:
+            raise RuntimeError("База данных не подключена. Вызовите connect() перед использованием.")
+
+        query = """
+            WITH ranked_balances AS (
+                SELECT p.last_seen_user_name AS user_name,
+                       prof.char_name,
+                       prof.bank_balance,
+                       ROW_NUMBER() OVER (PARTITION BY p.user_id ORDER BY prof.bank_balance DESC) AS rn
+                FROM profile prof
+                INNER JOIN preference pref ON prof.preference_id = pref.preference_id
+                INNER JOIN player p ON pref.user_id::text::uuid = p.user_id
+                WHERE prof.bank_balance IS NOT NULL
+            )
+            SELECT user_name, char_name, bank_balance
+            FROM ranked_balances
+            WHERE rn = 1
+            ORDER BY bank_balance DESC
+            LIMIT $1
+        """
+
+        try:
+            async with self.pool.acquire() as connection:
+                rows = await connection.fetch(query, limit)
+                return rows
+        except Exception as e:
+            logger.error(f"Ошибка при получении топа игроков по балансу: {e}")
+            raise
+
 
 # Глобальный экземпляр для использования в командах
 db = SS14Database()

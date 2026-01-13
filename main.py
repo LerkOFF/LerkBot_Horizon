@@ -2,7 +2,7 @@ import discord
 from config import TOKEN, GUILD_IDS
 from user_commands import my_ckey, change_my_name_color, add_disposable
 from role_events import on_member_update
-from db_commands import top_play_time
+from db_commands import top_play_time, top_balance
 from database import db
 
 intents = discord.Intents.default()
@@ -45,6 +45,11 @@ bot.slash_command(
     description='Показать топ-10 игроков по наигранному времени.',
     guild_ids=GUILD_IDS
 )(top_play_time)
+bot.slash_command(
+    name='top_balance',
+    description='Показать топ-10 игроков по банковскому балансу.',
+    guild_ids=GUILD_IDS
+)(top_balance)
 
 
 bot.event(on_member_update)

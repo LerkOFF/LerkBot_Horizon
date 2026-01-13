@@ -84,3 +84,73 @@ async def top_play_time(ctx: discord.ApplicationContext):
                 ephemeral=True
             )
         log_user_action(f'Error in top_play_time command: {e}', ctx.author)
+
+
+async def top_balance(ctx: discord.ApplicationContext):
+    """
+    Команда для отображения топ-10 игроков по банковскому балансу из БД SS14.
+    Доступна всем пользователям.
+    """
+    try:
+        # Откладываем ответ, так как запрос к БД может занять время
+        await ctx.defer()
+
+        # Получаем топ-10 игроков по балансу из БД
+        top_players = await db.get_top_players_by_balance(limit=10)
+
+        if not top_players:
+            await ctx.followup.send("Не удалось получить данные о балансе или база данных пуста.")
+            return
+
+        # Формируем красивое сообщение с топом
+        embed = discord.Embed(
+            title="💰 Топ-10 игроков по банковскому балансу",
+            description="Список игроков с наибольшим количеством денег на счету",
+            color=discord.Color.green()
+        )
+
+        # Добавляем каждого игрока в embed
+        for index, player in enumerate(top_players, start=1):
+            user_name = player['user_name']
+            char_name = player['char_name']
+            bank_balance = player['bank_balance']
+
+            # Форматируем баланс с разделителями тысяч
+            balance_text = f"{bank_balance:,.0f}" if bank_balance else "0"
+
+            # Эмодзи для топ-3
+            if index == 1:
+                medal = "🥇"
+            elif index == 2:
+                medal = "🥈"
+            elif index == 3:
+                medal = "🥉"
+            else:
+                medal = f"{index}."
+
+            embed.add_field(
+                name=f"{medal} {user_name}",
+                value=f"👤 {char_name}\n💵 {balance_text} кредитов",
+                inline=False
+            )
+
+        # Отправляем embed
+        await ctx.followup.send(embed=embed)
+        log_user_action(f'Top balance command used', ctx.author)
+
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении команды top_balance: {e}")
+        try:
+            await ctx.followup.send(
+                "Произошла ошибка при получении данных о балансе. "
+                "Пожалуйста, попробуйте позже или обратитесь к администратору.",
+                ephemeral=True
+            )
+        except:
+            # Если followup не сработал, пробуем respond
+            await ctx.respond(
+                "Произошла ошибка при получении данных о балансе. "
+                "Пожалуйста, попробуйте позже или обратитесь к администратору.",
+                ephemeral=True
+            )
+        log_user_action(f'Error in top_balance command: {e}', ctx.author)

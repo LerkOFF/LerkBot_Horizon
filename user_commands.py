@@ -2,6 +2,7 @@ from datetime import datetime
 import discord
 from config import CKEY_CHANNEL_ID, SPONSORS_FILE_PATH, CAN_GIVES_ROLES, DISPOSABLE_FILE_PATH
 import re
+import random
 from logger import log_user_action
 from utils import get_sponsor_roles
 
@@ -9,6 +10,7 @@ from utils import get_sponsor_roles
 DEFAULT_COLOR = "#FF0000"
 CKEY_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
 HEX_COLOR_PATTERN = re.compile(r'^#([A-Fa-f0-9]{6})$')
+DICE_PATTERN = re.compile(r'^(\d+)d(\d+)([+-]\d+)?$')
 
 
 async def check_ckey_channel(ctx: discord.ApplicationContext) -> bool:
@@ -249,3 +251,56 @@ async def add_disposable(
     except Exception as e:
         await ctx.respond(f"Произошла ошибка при добавлении слотов и токенов: {e}", ephemeral=True)
         log_user_action(f'Error adding disposable slots/tokens: {e}', ctx.author)
+
+
+async def roll(ctx: discord.ApplicationContext, dice: discord.Option(str, "Формат: nd+n (например, 1d6+2 или 2d20)")):
+    """Команда для броска кубиков."""
+    try:
+        # Парсинг формата nd+n
+        match = DICE_PATTERN.match(dice.strip().lower())
+        if not match:
+            await ctx.respond(
+                "Неверный формат. Используйте формат: **nd+n** (например, `1d6`, `1d6+2`, `2d20-5`).\n"
+                "Где: n - количество кубиков, d - разделитель, n - грани кубика, +n - модификатор (опционально).",
+                ephemeral=True
+            )
+            return
+
+        num_dice = int(match.group(1))
+        dice_faces = int(match.group(2))
+        modifier_str = match.group(3)
+        modifier = int(modifier_str) if modifier_str else 0
+
+        # Валидация входных данных
+        if num_dice < 1 or num_dice > 100:
+            await ctx.respond("Количество кубиков должно быть от 1 до 100.", ephemeral=True)
+            return
+
+        if dice_faces < 2 or dice_faces > 1000:
+            await ctx.respond("Количество граней должно быть от 2 до 1000.", ephemeral=True)
+            return
+
+        # Бросок кубиков
+        rolls = [random.randint(1, dice_faces) for _ in range(num_dice)]
+        rolls_sum = sum(rolls)
+        total = rolls_sum + modifier
+
+        # Формирование ответа
+        if num_dice == 1:
+            result_text = f"**{rolls[0]}**"
+        else:
+            rolls_str = " + ".join(str(r) for r in rolls)
+            result_text = f"({rolls_str}) = **{rolls_sum}**"
+
+        if modifier != 0:
+            modifier_sign = "+" if modifier > 0 else ""
+            result_text += f" {modifier_sign}{modifier} = **{total}**"
+
+        response = f"🎲 {ctx.author.mention} бросает {dice}:\n{result_text}"
+
+        await ctx.respond(response)
+        log_user_action(f'Roll command used: {dice} = {total}', ctx.author)
+
+    except Exception as e:
+        await ctx.respond(f"Произошла ошибка при броске кубиков: {e}", ephemeral=True)
+        log_user_action(f'Error rolling dice: {e}', ctx.author)

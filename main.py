@@ -1,6 +1,6 @@
 import discord
 from config import TOKEN, GUILD_IDS
-from user_commands import my_ckey, change_my_name_color, add_disposable
+from user_commands import my_ckey, change_my_name_color, add_disposable, roll
 from role_events import on_member_update
 from db_commands import top_play_time, top_balance
 from database import db
@@ -50,6 +50,11 @@ bot.slash_command(
     description='Показать топ-10 игроков по банковскому балансу.',
     guild_ids=GUILD_IDS
 )(top_balance)
+bot.slash_command(
+    name='roll',
+    description='Бросить кубики. Формат: nd+n (например, 1d6+2 или 2d20).',
+    guild_ids=GUILD_IDS
+)(roll)
 
 
 bot.event(on_member_update)

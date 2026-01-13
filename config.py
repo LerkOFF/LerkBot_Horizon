@@ -50,6 +50,7 @@ LOG_FILE_PATH = _get_env('LOG_FILE_PATH')
 DISPOSABLE_FILE_PATH = _get_env('DISPOSABLE_FILE_PATH')
 CAN_GIVES_ROLES = _get_env_list_str('CAN_GIVES_ROLES')
 BOOSTY_ROLE_ID = _get_env_int('BOOSTY_ROLE_ID')
+TOP_COMMANDS_ALLOWED_CHANNELS = _get_env_list_int('TOP_COMMANDS_ALLOWED_CHANNELS')
 
 # SS14 Database Configuration (PostgreSQL)
 SS14_DB_HOST = _get_env('DB_HOST')

@@ -2,15 +2,44 @@ import discord
 from database import db
 from logger import log_user_action
 from utils import get_medal, send_error_response, format_playtime
+from config import TOP_COMMANDS_ALLOWED_CHANNELS
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+async def check_top_commands_channel(ctx: discord.ApplicationContext) -> bool:
+    """
+    Проверить, что команда вызвана в разрешенном канале.
+
+    Returns:
+        True если канал разрешен, False если нет (ответ уже отправлен)
+    """
+    if ctx.channel.id not in TOP_COMMANDS_ALLOWED_CHANNELS:
+        allowed_channels = [ctx.guild.get_channel(ch_id) for ch_id in TOP_COMMANDS_ALLOWED_CHANNELS]
+        allowed_channels = [ch for ch in allowed_channels if ch is not None]
+        
+        if not allowed_channels:
+            await ctx.respond("Ошибка: разрешенные каналы для команды не найдены.", ephemeral=True)
+            return False
+        
+        channels_mention = ", ".join([ch.mention for ch in allowed_channels])
+        await ctx.respond(
+            f"Эта команда может использоваться только в следующих каналах: {channels_mention}.",
+            ephemeral=True
+        )
+        return False
+
+    return True
 
 
 async def top_play_time(ctx: discord.ApplicationContext):
     """
     Команда для отображения топ-10 игроков по наигранному времени из БД SS14.
     """
+    if not await check_top_commands_channel(ctx):
+        return
+    
     try:
         await ctx.defer()
 
@@ -62,6 +91,9 @@ async def top_balance(ctx: discord.ApplicationContext):
     """
     Команда для отображения топ-10 игроков по банковскому балансу из БД SS14.
     """
+    if not await check_top_commands_channel(ctx):
+        return
+    
     try:
         await ctx.defer()
 

@@ -32,7 +32,15 @@ async def top_play_time(ctx: discord.ApplicationContext):
         # Добавляем каждого игрока в embed
         for index, player in enumerate(top_players, start=1):
             player_name = player['user_name']
-            total_time_seconds = player['total_time']
+            total_time = player['total_time']
+
+            # Обрабатываем timedelta или числовое значение
+            if hasattr(total_time, 'total_seconds'):
+                # Если это timedelta, получаем общее количество секунд
+                total_time_seconds = int(total_time.total_seconds())
+            else:
+                # Если это число, используем как есть
+                total_time_seconds = int(total_time)
 
             # Конвертируем секунды в более читаемый формат (часы, минуты)
             hours = total_time_seconds // 3600

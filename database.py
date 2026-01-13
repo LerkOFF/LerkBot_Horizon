@@ -49,13 +49,14 @@ class SS14Database:
             raise RuntimeError("База данных не подключена. Вызовите connect() перед использованием.")
 
         query = """
-            SELECT p.user_name, SUM(pt.time_spent) as total_time
-            FROM play_time pt
-            INNER JOIN player p ON pt.player_id = p.user_id
-            GROUP BY p.user_id, p.user_name
-            ORDER BY total_time DESC
-            LIMIT $1
-        """
+                SELECT p.last_seen_user_name AS user_name,
+                       SUM(pt.time_spent)    AS total_time
+                FROM play_time pt
+                         INNER JOIN player p ON pt.player_id = p.user_id
+                GROUP BY p.last_seen_user_name
+                ORDER BY total_time DESC
+                    LIMIT $1 \
+                """
 
         try:
             async with self.pool.acquire() as connection:

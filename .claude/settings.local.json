@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(claude mcp list:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs"
     ]
   }
 }

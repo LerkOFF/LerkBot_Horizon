@@ -157,3 +157,10 @@
 [2026-01-11 19:21:46] User: kukarek_1 (ID: 1333660281259425867) - Action: Role added: 1349080829334257856
 [2026-01-11 20:17:33] User: kukarek_1 (ID: 1333660281259425867) - Action: CKEY command used: Kukarek_ (default color: #FF0000)
 [2026-01-11 20:24:47] User: .guardsman (ID: 266578684335489025) - Action: CKEY command used: Guardsman (default color: #FF0000)
+[2026-01-11 23:03:09] User: joulerk (ID: 350204576458342400) - Action: BOOSTY_ROLE_ID (Тучка) добавлена пользователю joulerk
+[2026-01-11 23:03:09] User: joulerk (ID: 350204576458342400) - Action: Role added: 1020708899441102888
+[2026-01-11 23:03:32] User: joulerk (ID: 350204576458342400) - Action: CKEY command used: d (default color: #FF0000)
+[2026-01-11 23:04:23] User: joulerk (ID: 350204576458342400) - Action: CKEY command used: nono (default color: #FF0000)
+[2026-01-13 21:53:12] User: joulerk (ID: 350204576458342400) - Action: Error in top_play_time command: столбец pt.player_id не существует
+[2026-01-13 21:55:56] User: joulerk (ID: 350204576458342400) - Action: Error in top_play_time command: отношение "play_time" не существует
+[2026-01-13 21:57:42] User: joulerk (ID: 350204576458342400) - Action: Error in top_play_time command: столбец p.user_name не существует

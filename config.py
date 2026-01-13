@@ -39,6 +39,7 @@ def _get_env_list_str(key: str) -> list[str]:
     return value.split(',')
 
 
+# Discord Configuration
 TOKEN = _get_env('DISCORD_TOKEN')
 GUILD_IDS = _get_env_list_int('GUILD_IDS')
 TRACKED_ROLES = _get_env_list_int('TRACKED_ROLES')
@@ -49,3 +50,10 @@ LOG_FILE_PATH = _get_env('LOG_FILE_PATH')
 DISPOSABLE_FILE_PATH = _get_env('DISPOSABLE_FILE_PATH')
 CAN_GIVES_ROLES = _get_env_list_str('CAN_GIVES_ROLES')
 BOOSTY_ROLE_ID = _get_env_int('BOOSTY_ROLE_ID')
+
+# SS14 Database Configuration (PostgreSQL)
+SS14_DB_HOST = _get_env('DB_HOST')
+SS14_DB_PORT = _get_env_int('DB_PORT')
+SS14_DB_NAME = _get_env('DB_NAME')
+SS14_DB_USER = _get_env('DB_USER')
+SS14_DB_PASSWORD = _get_env('DB_PASSWORD')

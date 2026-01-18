@@ -39,6 +39,11 @@ def _get_env_list_str(key: str) -> list[str]:
     return value.split(',')
 
 
+def _get_env_optional(key: str, default: str = "") -> str:
+    """Получение опциональной переменной окружения с значением по умолчанию."""
+    return os.getenv(key, default)
+
+
 # Discord Configuration
 TOKEN = _get_env('DISCORD_TOKEN')
 GUILD_IDS = _get_env_list_int('GUILD_IDS')
@@ -58,3 +63,8 @@ SS14_DB_PORT = _get_env_int('DB_PORT')
 SS14_DB_NAME = _get_env('DB_NAME')
 SS14_DB_USER = _get_env('DB_USER')
 SS14_DB_PASSWORD = _get_env('DB_PASSWORD')
+
+# Achievements Configuration
+ACHIEVEMENTS_CATALOG_PATH = _get_env_optional('ACHIEVEMENTS_CATALOG_PATH', 'data/reachs.txt')
+PLAYERS_ACHIEVEMENTS_PATH = _get_env_optional('PLAYERS_ACHIEVEMENTS_PATH', 'data/players_reachs.txt')
+ACHIEVEMENTS_ALLOWED_ROLE_IDS = _get_env_list_int('ACHIEVEMENTS_ALLOWED_ROLE_IDS')

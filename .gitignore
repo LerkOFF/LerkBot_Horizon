@@ -25,3 +25,7 @@ venv/
 # Logs and Claude
 logs.txt
 .claude/
+/.claude/
+.cursor/
+/.cursor/
+/plan.md

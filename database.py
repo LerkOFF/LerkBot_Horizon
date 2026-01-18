@@ -105,6 +105,36 @@ class SS14Database:
             logger.error(f"Ошибка при получении топа игроков по балансу: {e}")
             raise
 
+    async def resolve_ckey_by_player_name(self, player_name: str) -> str | None:
+        """
+        Разрешить ckey по имени игрока из SS14 базы данных.
+
+        Args:
+            player_name: имя игрока для поиска (case-insensitive)
+
+        Returns:
+            ckey (last_seen_user_name) или None если игрок не найден
+        """
+        if not self.pool:
+            raise RuntimeError("База данных не подключена. Вызовите connect() перед использованием.")
+
+        query = """
+            SELECT LOWER(TRIM(p.last_seen_user_name)) AS ckey
+            FROM player p
+            WHERE LOWER(TRIM(p.last_seen_user_name)) = LOWER(TRIM($1))
+            LIMIT 1
+        """
+
+        try:
+            async with self.pool.acquire() as connection:
+                row = await connection.fetchrow(query, player_name)
+                if row:
+                    return row['ckey']
+                return None
+        except Exception as e:
+            logger.error(f"Ошибка при разрешении ckey для игрока '{player_name}': {e}")
+            return None
+
 
 # Глобальный экземпляр для использования в командах
 db = SS14Database()

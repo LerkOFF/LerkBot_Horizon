@@ -36,4 +36,4 @@ If you have any questions or concerns about these Terms, please contact us at le
 
 ---
 
-_Last updated: [2024-09-01]_
+_Last updated: [2026-01-18]_

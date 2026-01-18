@@ -1212,8 +1212,17 @@ class EditReachModal(discord.ui.Modal):
                 if len(parts) >= 1:
                     line_ach_id = parts[0].strip().lower()
                     if line_ach_id == self.ach_id.lower():
-                        # Заменяем эту строку новой
-                        new_line = f"{self.ach_id}|{title}|{description}\n"
+                        # Заменяем эту строку новой, сохраняя оригинальное окончание строки
+                        # Определяем окончание строки (может быть \n, \r\n или отсутствовать)
+                        line_ending = ''
+                        if line.endswith('\r\n'):
+                            line_ending = '\r\n'
+                        elif line.endswith('\n'):
+                            line_ending = '\n'
+                        elif line.endswith('\r'):
+                            line_ending = '\r'
+                        
+                        new_line = f"{self.ach_id}|{title}|{description}{line_ending}"
                         updated_lines.append(new_line)
                         found = True
                         continue

@@ -237,6 +237,125 @@ class AchievementSelectView(discord.ui.View):
             item.disabled = True
 
 
+class RemoveAchievementSelectView(discord.ui.View):
+    """View с dropdown меню для выбора достижения для удаления."""
+
+    def __init__(self, ckey: str, ds_nickname: str, player_achievements: dict[str, str]):
+        """
+        Инициализация view.
+
+        Args:
+            ckey: ckey игрока
+            ds_nickname: Discord никнейм игрока
+            player_achievements: словарь {ach_id: title} достижений игрока
+        """
+        super().__init__(timeout=120)  # View истекает через 120 секунд
+        self.ckey = ckey
+        self.ds_nickname = ds_nickname
+        self.player_achievements = player_achievements
+
+        # Создание dropdown с достижениями
+        if player_achievements:
+            select = discord.ui.Select(
+                placeholder="Выберите достижение для удаления",
+                min_values=1,
+                max_values=1,
+                options=[
+                    discord.SelectOption(
+                        label=title,
+                        value=ach_id,
+                        description=title[:100]  # Discord ограничение длины описания
+                    )
+                    for ach_id, title in player_achievements.items()
+                ]
+            )
+            select.callback = self.on_select
+            self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        """
+        Обработчик выбора достижения из dropdown.
+
+        Args:
+            interaction: взаимодействие Discord
+        """
+        # Проверка прав (defense-in-depth)
+        user_roles = {role.id for role in interaction.user.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await interaction.response.send_message(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        selected_ach_id = interaction.data['values'][0]
+
+        try:
+            # Откладываем ответ для выполнения асинхронных операций
+            await interaction.response.defer(ephemeral=True)
+
+            # Проверяем состояние хранилища еще раз
+            current_achievements = await store.get_player_achievements(self.ckey)
+
+            if not current_achievements or selected_ach_id not in current_achievements:
+                ach_title = self.player_achievements.get(selected_ach_id, selected_ach_id)
+                # Редактируем исходное сообщение с dropdown
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"Достижение '{ach_title}' не найдено у игрока {self.ds_nickname}.",
+                    view=None  # Убираем dropdown
+                )
+                return
+
+            # Удаляем достижение
+            success = await store.remove_achievement(self.ckey, self.ds_nickname, selected_ach_id)
+
+            if success:
+                ach_title = self.player_achievements.get(selected_ach_id, selected_ach_id)
+                # Редактируем исходное сообщение с dropdown, заменяя его на текст об удалении
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"✅ Достижение **{ach_title}** удалено у игрока **{self.ds_nickname}** ({self.ckey}).",
+                    view=None  # Убираем dropdown
+                )
+                log_user_action(
+                    f'Achievement removed: {selected_ach_id} from {self.ds_nickname} ({self.ckey})',
+                    interaction.user
+                )
+            else:
+                ach_title = self.player_achievements.get(selected_ach_id, selected_ach_id)
+                # Редактируем исходное сообщение
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"Достижение '{ach_title}' не было у игрока {self.ds_nickname}.",
+                    view=None  # Убираем dropdown
+                )
+
+        except Exception as e:
+            logger.error(f"Ошибка при удалении достижения {selected_ach_id} у игрока {self.ckey}: {e}")
+            try:
+                # Пытаемся отредактировать сообщение с ошибкой
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"Произошла ошибка при удалении достижения: {e}",
+                    view=None
+                )
+            except Exception:
+                # Если редактирование не удалось, отправляем новое сообщение
+                try:
+                    await interaction.followup.send(
+                        f"Произошла ошибка при удалении достижения: {e}",
+                        ephemeral=True
+                    )
+                except Exception:
+                    pass
+
+    async def on_timeout(self):
+        """Обработчик истечения времени ожидания."""
+        for item in self.children:
+            item.disabled = True
+
+
 async def get_reachs(
     ctx: discord.ApplicationContext,
     user: discord.Option(discord.Member, "Пользователь Discord (можно использовать @пользователь)", required=False, default=None)
@@ -420,6 +539,121 @@ async def set_reach(
 
     except Exception as e:
         logger.error(f"Ошибка при выполнении команды set_reach: {e}")
+        try:
+            await ctx.followup.send(
+                "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
+                ephemeral=True
+            )
+        except Exception:
+            try:
+                await ctx.respond(
+                    "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+
+
+async def remove_reach(
+    ctx: discord.ApplicationContext,
+    user: discord.Option(discord.Member, "Пользователь Discord (можно использовать @пользователь)", required=False, default=None)
+):
+    """
+    Команда для удаления достижения у игрока через dropdown меню.
+
+    Args:
+        ctx: контекст команды Discord
+        user: пользователь Discord (можно использовать пинг @пользователь)
+    """
+    try:
+        # Проверка прав
+        user_roles = {role.id for role in ctx.author.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await ctx.respond(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        # Получение Discord никнейма
+        if user:
+            # Если передан пинг пользователя - используем его никнейм
+            discord_nickname = user.display_name or user.name
+        else:
+            # Если пинг не передан - используем никнейм автора команды
+            discord_nickname = ctx.author.display_name or ctx.author.name
+
+        if not discord_nickname:
+            await ctx.respond("Не удалось определить Discord никнейм.", ephemeral=True)
+            return
+
+        # Пытаемся найти игрока по Discord нику в файле
+        result = await store.get_player_achievements_by_discord_nickname(discord_nickname)
+
+        if result:
+            # Игрок найден в файле - используем его ckey и показываем dropdown сразу
+            ckey, current_achievements = result
+
+            await ctx.defer(ephemeral=True)
+
+            # Проверяем ckey в БД SS14 для валидации
+            ckey_from_db = await db.resolve_ckey_by_player_name(ckey)
+
+            if not ckey_from_db:
+                await ctx.followup.send(
+                    f"❌ Ckey '{ckey}' игрока '{discord_nickname}' не найден в базе данных SS14. "
+                    "Пожалуйста, проверьте правильность данных.",
+                    ephemeral=True
+                )
+                return
+
+            # Используем нормализованный ckey из БД
+            ckey = ckey_from_db
+
+            # Проверка наличия достижений
+            if not current_achievements or len(current_achievements) == 0:
+                await ctx.followup.send(
+                    f"Игрок **{discord_nickname}** ({ckey}) не имеет достижений для удаления.",
+                    ephemeral=True
+                )
+                return
+
+            # Получение всех достижений из каталога
+            catalog_all = catalog.get_all()
+
+            # Вычисление достижений игрока (только имеющиеся у игрока)
+            player_achievements = {
+                ach_id: catalog_all[ach_id].title
+                for ach_id in current_achievements
+                if ach_id in catalog_all
+            }
+
+            if not player_achievements:
+                await ctx.followup.send(
+                    f"У игрока **{discord_nickname}** ({ckey}) не найдено достижений в каталоге.",
+                    ephemeral=True
+                )
+                return
+
+            # Создание view с dropdown меню
+            view = RemoveAchievementSelectView(ckey, discord_nickname, player_achievements)
+
+            await ctx.followup.send(
+                f"Выберите достижение для удаления у игрока **{discord_nickname}** ({ckey}):",
+                view=view,
+                ephemeral=True
+            )
+
+            log_user_action(f'Remove reach command: ckey {ckey} for {discord_nickname}', ctx.author)
+        else:
+            # Игрок не найден в файле
+            await ctx.respond(
+                f"Игрок с Discord никнеймом '{discord_nickname}' не найден в системе достижений.",
+                ephemeral=True
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении команды remove_reach: {e}")
         try:
             await ctx.followup.send(
                 "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",

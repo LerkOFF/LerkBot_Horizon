@@ -251,6 +251,46 @@ class PlayerAchievementsStore:
         logger.info(f"Добавлено достижение '{normalized_ach_id}' игроку {ds_nickname} ({normalized_ckey})")
         return True
 
+    async def remove_achievement(
+        self,
+        ckey: str,
+        ds_nickname: str,
+        ach_id: str
+    ) -> bool:
+        """
+        Удалить достижение у игрока.
+
+        Args:
+            ckey: ckey игрока
+            ds_nickname: Discord никнейм
+            ach_id: ID достижения для удаления
+
+        Returns:
+            True если достижение было удалено, False если его не было у игрока
+        """
+        normalized_ckey = self._normalize_ckey(ckey)
+        normalized_ach_id = ach_id.strip().lower()
+
+        players = await self._read_all()
+
+        # Проверка: игрок существует?
+        if normalized_ckey not in players:
+            return False
+
+        current_ds_nickname, current_achievements = players[normalized_ckey]
+
+        # Проверка: есть ли достижение?
+        if normalized_ach_id not in current_achievements:
+            return False
+
+        # Удалить достижение
+        current_achievements.remove(normalized_ach_id)
+        players[normalized_ckey] = (ds_nickname, current_achievements)
+        await self._write_all(players)
+
+        logger.info(f"Удалено достижение '{normalized_ach_id}' у игрока {ds_nickname} ({normalized_ckey})")
+        return True
+
 
 # Глобальный экземпляр хранилища
 store = PlayerAchievementsStore()

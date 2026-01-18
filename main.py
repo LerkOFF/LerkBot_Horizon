@@ -3,7 +3,7 @@ from config import TOKEN, GUILD_IDS
 from cogs.user_commands import my_ckey, change_my_name_color, add_disposable, roll
 from cogs.role_events import on_member_update
 from cogs.db_commands import top_play_time, top_balance
-from cogs.achievements import get_reachs, set_reach, remove_reach
+from cogs.achievements import get_reachs, set_reach, remove_reach, add_reachs
 from database import db
 from services.achievements_catalog import catalog
 
@@ -79,6 +79,11 @@ bot.slash_command(
     description='Удалить достижение у игрока через dropdown меню (требуются права).',
     guild_ids=GUILD_IDS
 )(remove_reach)
+bot.slash_command(
+    name='add_reachs',
+    description='Добавить достижение в каталог через модальное окно (требуются права).',
+    guild_ids=GUILD_IDS
+)(add_reachs)
 
 
 bot.event(on_member_update)

@@ -3,10 +3,12 @@ Cog для управления достижениями игроков SS14 ч�
 """
 import discord
 import logging
+import tempfile
+from pathlib import Path
 from database import db
-from services.achievements_catalog import catalog
+from services.achievements_catalog import catalog, ACHIEVEMENT_ID_PATTERN
 from services.player_achievements_store import store
-from config import ACHIEVEMENTS_ALLOWED_ROLE_IDS
+from config import ACHIEVEMENTS_ALLOWED_ROLE_IDS, ACHIEVEMENTS_CATALOG_PATH
 from utils.logger import log_user_action
 
 logger = logging.getLogger(__name__)
@@ -653,17 +655,200 @@ async def remove_reach(
             )
 
     except Exception as e:
-        logger.error(f"Ошибка при выполнении команды remove_reach: {e}")
-        try:
-            await ctx.followup.send(
-                "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
-                ephemeral=True
-            )
-        except Exception:
+            logger.error(f"Ошибка при выполнении команды remove_reach: {e}")
             try:
-                await ctx.respond(
+                await ctx.followup.send(
                     "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
                     ephemeral=True
                 )
             except Exception:
-                pass
+                try:
+                    await ctx.respond(
+                        "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
+                        ephemeral=True
+                    )
+                except Exception:
+                    pass
+
+
+class AddReachModal(discord.ui.Modal):
+    """Модальное окно для добавления достижения в каталог (reachs.txt)."""
+
+    def __init__(self):
+        """Инициализация модального окна."""
+        super().__init__(title="Добавление достижения в каталог")
+        
+        self.ach_id_input = discord.ui.InputText(
+            label="ID достижения",
+            placeholder="Например: first_blood (только буквы, цифры, подчеркивания)",
+            min_length=1,
+            max_length=50
+        )
+        self.add_item(self.ach_id_input)
+        
+        self.ach_title_input = discord.ui.InputText(
+            label="Название достижения",
+            placeholder="Например: Первая кровь",
+            min_length=1,
+            max_length=200
+        )
+        self.add_item(self.ach_title_input)
+        
+        self.ach_description_input = discord.ui.InputText(
+            label="Описание достижения",
+            placeholder="Например: Убей 1 живность",
+            min_length=1,
+            max_length=500,
+            style=discord.InputTextStyle.long
+        )
+        self.add_item(self.ach_description_input)
+
+    async def callback(self, interaction: discord.Interaction):
+        """
+        Обработчик отправки модального окна.
+
+        Args:
+            interaction: взаимодействие Discord
+        """
+        # Проверка прав (defense-in-depth)
+        user_roles = {role.id for role in interaction.user.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await interaction.response.send_message(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        # Получение и нормализация значений
+        ach_id = self.ach_id_input.value.strip().lower()
+        title = self.ach_title_input.value.strip()
+        description = self.ach_description_input.value.strip()
+
+        # Валидация ID достижения
+        if not ach_id:
+            await interaction.response.send_message(
+                "ID достижения не может быть пустым.",
+                ephemeral=True
+            )
+            return
+
+        if not ACHIEVEMENT_ID_PATTERN.match(ach_id):
+            await interaction.response.send_message(
+                "❌ Неверный формат ID достижения. ID должен содержать только строчные буквы, цифры и подчеркивания (например: first_blood).",
+                ephemeral=True
+            )
+            return
+
+        if not title:
+            await interaction.response.send_message(
+                "Название достижения не может быть пустым.",
+                ephemeral=True
+            )
+            return
+
+        if not description:
+            await interaction.response.send_message(
+                "Описание достижения не может быть пустым.",
+                ephemeral=True
+            )
+            return
+
+        # Проверка на дубликаты
+        if catalog.exists(ach_id):
+            await interaction.response.send_message(
+                f"❌ Достижение с ID '{ach_id}' уже существует в каталоге.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            # Откладываем ответ для выполнения асинхронных операций
+            await interaction.response.defer(ephemeral=True)
+
+            catalog_path = Path(ACHIEVEMENTS_CATALOG_PATH)
+            
+            # Создаем директорию, если её нет
+            catalog_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Атомическая запись: пишем во временный файл, затем заменяем
+            new_line = f"{ach_id}|{title}|{description}\n"
+            
+            # Читаем существующий файл
+            existing_lines = []
+            if catalog_path.exists():
+                with open(catalog_path, 'r', encoding='utf-8') as f:
+                    existing_lines = f.readlines()
+
+            # Создаем временный файл и записываем данные
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                encoding='utf-8',
+                dir=catalog_path.parent,
+                delete=False,
+                suffix='.tmp'
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                
+                # Записываем существующие строки
+                for line in existing_lines:
+                    temp_file.write(line)
+                
+                # Добавляем новую строку
+                temp_file.write(new_line)
+
+            # Атомически заменяем оригинальный файл
+            temp_path.replace(catalog_path)
+
+            # Перезагружаем каталог
+            catalog.load()
+
+            await interaction.followup.send(
+                f"✅ Достижение **{title}** (ID: `{ach_id}`) успешно добавлено в каталог.",
+                ephemeral=True
+            )
+
+            log_user_action(
+                f'Achievement added to catalog: {ach_id} - {title}',
+                interaction.user
+            )
+
+        except Exception as e:
+            logger.error(f"Ошибка при добавлении достижения в каталог: {e}")
+            await interaction.followup.send(
+                f"Произошла ошибка при добавлении достижения: {e}",
+                ephemeral=True
+            )
+
+
+async def add_reachs(ctx: discord.ApplicationContext):
+    """
+    Команда для добавления достижения в каталог (reachs.txt) через модальное окно.
+
+    Args:
+        ctx: контекст команды Discord
+    """
+    try:
+        # Проверка прав
+        user_roles = {role.id for role in ctx.author.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await ctx.respond(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        # Открываем модальное окно
+        modal = AddReachModal()
+        await ctx.send_modal(modal)
+
+        log_user_action('Add reachs command initiated', ctx.author)
+
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении команды add_reachs: {e}")
+        try:
+            await ctx.respond(
+                "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
+                ephemeral=True
+            )
+        except Exception:
+            pass

@@ -852,3 +852,223 @@ async def add_reachs(ctx: discord.ApplicationContext):
             )
         except Exception:
             pass
+
+
+class DeleteReachSelectView(discord.ui.View):
+    """View с dropdown меню для выбора достижения для удаления из каталога."""
+
+    def __init__(self, catalog_achievements: dict[str, str]):
+        """
+        Инициализация view.
+
+        Args:
+            catalog_achievements: словарь {ach_id: title} всех достижений в каталоге
+        """
+        super().__init__(timeout=120)  # View истекает через 120 секунд
+        self.catalog_achievements = catalog_achievements
+
+        # Создание dropdown с достижениями
+        if catalog_achievements:
+            select = discord.ui.Select(
+                placeholder="Выберите достижение для удаления из каталога",
+                min_values=1,
+                max_values=1,
+                options=[
+                    discord.SelectOption(
+                        label=title,
+                        value=ach_id,
+                        description=f"ID: {ach_id}"[:100]  # Discord ограничение длины описания
+                    )
+                    for ach_id, title in catalog_achievements.items()
+                ]
+            )
+            select.callback = self.on_select
+            self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        """
+        Обработчик выбора достижения из dropdown.
+
+        Args:
+            interaction: взаимодействие Discord
+        """
+        # Проверка прав (defense-in-depth)
+        user_roles = {role.id for role in interaction.user.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await interaction.response.send_message(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        selected_ach_id = interaction.data['values'][0]
+
+        try:
+            # Откладываем ответ для выполнения асинхронных операций
+            await interaction.response.defer(ephemeral=True)
+
+            # Проверяем, существует ли достижение в каталоге
+            if not catalog.exists(selected_ach_id):
+                ach_title = self.catalog_achievements.get(selected_ach_id, selected_ach_id)
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"Достижение '{ach_title}' не найдено в каталоге.",
+                    view=None
+                )
+                return
+
+            ach_title = self.catalog_achievements.get(selected_ach_id, selected_ach_id)
+            catalog_path = Path(ACHIEVEMENTS_CATALOG_PATH)
+
+            # Читаем существующий файл каталога
+            if not catalog_path.exists():
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content="Файл каталога достижений не найден.",
+                    view=None
+                )
+                return
+
+            # Читаем все строки из файла
+            with open(catalog_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            # Фильтруем строку с удаляемым достижением
+            filtered_lines = []
+            removed_from_catalog = False
+            for line in lines:
+                line_stripped = line.strip()
+                # Игнорируем пустые строки и комментарии
+                if not line_stripped or line_stripped.startswith('#'):
+                    filtered_lines.append(line)
+                    continue
+
+                # Парсим строку формата: id|title|description
+                parts = line_stripped.split('|')
+                if len(parts) >= 1:
+                    line_ach_id = parts[0].strip().lower()
+                    if line_ach_id == selected_ach_id.lower():
+                        # Пропускаем эту строку (удаляем)
+                        removed_from_catalog = True
+                        continue
+
+                filtered_lines.append(line)
+
+            if not removed_from_catalog:
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"Достижение '{ach_title}' не найдено в файле каталога.",
+                    view=None
+                )
+                return
+
+            # Атомически записываем обновленный каталог
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                encoding='utf-8',
+                dir=catalog_path.parent,
+                delete=False,
+                suffix='.tmp'
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                temp_file.writelines(filtered_lines)
+
+            # Атомически заменяем оригинальный файл
+            temp_path.replace(catalog_path)
+
+            # Удаляем достижение у всех игроков в players_reachs.txt
+            count_removed_from_players = await store.remove_achievement_from_all_players(selected_ach_id)
+
+            # Перезагружаем каталог
+            catalog.load()
+
+            await interaction.followup.edit_message(
+                interaction.message.id,
+                content=(
+                    f"✅ Достижение **{ach_title}** (ID: `{selected_ach_id}`) успешно удалено из каталога.\n"
+                    f"Также удалено у {count_removed_from_players} игроков."
+                ),
+                view=None
+            )
+
+            log_user_action(
+                f'Achievement deleted from catalog: {selected_ach_id} - {ach_title} (removed from {count_removed_from_players} players)',
+                interaction.user
+            )
+
+        except Exception as e:
+            logger.error(f"Ошибка при удалении достижения {selected_ach_id} из каталога: {e}")
+            try:
+                await interaction.followup.edit_message(
+                    interaction.message.id,
+                    content=f"Произошла ошибка при удалении достижения: {e}",
+                    view=None
+                )
+            except Exception:
+                try:
+                    await interaction.followup.send(
+                        f"Произошла ошибка при удалении достижения: {e}",
+                        ephemeral=True
+                    )
+                except Exception:
+                    pass
+
+    async def on_timeout(self):
+        """Обработчик истечения времени ожидания."""
+        for item in self.children:
+            item.disabled = True
+
+
+async def delete_reachs(ctx: discord.ApplicationContext):
+    """
+    Команда для удаления достижения из каталога (reachs.txt) через dropdown меню.
+
+    Args:
+        ctx: контекст команды Discord
+    """
+    try:
+        # Проверка прав
+        user_roles = {role.id for role in ctx.author.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await ctx.respond(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        # Получение всех достижений из каталога
+        catalog_all = catalog.get_all()
+
+        if not catalog_all:
+            await ctx.respond(
+                "Каталог достижений пуст.",
+                ephemeral=True
+            )
+            return
+
+        # Создание словаря для dropdown
+        catalog_achievements = {
+            ach_id: ach_def.title
+            for ach_id, ach_def in catalog_all.items()
+        }
+
+        # Создание view с dropdown меню
+        view = DeleteReachSelectView(catalog_achievements)
+
+        await ctx.respond(
+            "Выберите достижение для удаления из каталога:",
+            view=view,
+            ephemeral=True
+        )
+
+        log_user_action('Delete reachs command initiated', ctx.author)
+
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении команды delete_reachs: {e}")
+        try:
+            await ctx.respond(
+                "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
+                ephemeral=True
+            )
+        except Exception:
+            pass

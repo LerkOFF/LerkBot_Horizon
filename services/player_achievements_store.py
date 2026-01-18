@@ -291,6 +291,34 @@ class PlayerAchievementsStore:
         logger.info(f"Удалено достижение '{normalized_ach_id}' у игрока {ds_nickname} ({normalized_ckey})")
         return True
 
+    async def remove_achievement_from_all_players(self, ach_id: str) -> int:
+        """
+        Удалить достижение у всех игроков.
+
+        Args:
+            ach_id: ID достижения для удаления
+
+        Returns:
+            Количество игроков, у которых было удалено достижение
+        """
+        normalized_ach_id = ach_id.strip().lower()
+        players = await self._read_all()
+
+        count_removed = 0
+
+        # Удалить достижение у всех игроков
+        for ckey, (ds_nickname, achievements_set) in players.items():
+            if normalized_ach_id in achievements_set:
+                achievements_set.remove(normalized_ach_id)
+                players[ckey] = (ds_nickname, achievements_set)
+                count_removed += 1
+
+        if count_removed > 0:
+            await self._write_all(players)
+            logger.info(f"Удалено достижение '{normalized_ach_id}' у {count_removed} игроков")
+
+        return count_removed
+
 
 # Глобальный экземпляр хранилища
 store = PlayerAchievementsStore()

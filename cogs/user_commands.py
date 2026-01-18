@@ -3,8 +3,8 @@ import discord
 from config import CKEY_CHANNEL_ID, SPONSORS_FILE_PATH, CAN_GIVES_ROLES, DISPOSABLE_FILE_PATH
 import re
 import random
-from logger import log_user_action
-from utils import get_sponsor_roles
+from utils.logger import log_user_action
+from utils.utils import get_sponsor_roles
 
 # Константы
 DEFAULT_COLOR = "#FF0000"

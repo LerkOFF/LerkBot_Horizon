@@ -4,8 +4,8 @@ import logging
 import os
 import tempfile
 from config import TRACKED_ROLES, INFO_CHANNEL_ID, SPONSORS_FILE_PATH, CKEY_CHANNEL_ID
-from logger import log_user_action
-from utils import manage_boosty_role
+from utils.logger import log_user_action
+from utils.utils import manage_boosty_role
 
 logger = logging.getLogger(__name__)
 

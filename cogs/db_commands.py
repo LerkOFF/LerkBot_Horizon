@@ -1,7 +1,7 @@
 import discord
 from database import db
-from logger import log_user_action
-from utils import get_medal, send_error_response, format_playtime
+from utils.logger import log_user_action
+from utils.utils import get_medal, send_error_response, format_playtime
 from config import TOP_COMMANDS_ALLOWED_CHANNELS
 import logging
 

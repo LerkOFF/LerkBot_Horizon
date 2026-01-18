@@ -1,8 +1,8 @@
 import discord
 from config import TOKEN, GUILD_IDS
-from user_commands import my_ckey, change_my_name_color, add_disposable, roll
-from role_events import on_member_update
-from db_commands import top_play_time, top_balance
+from cogs.user_commands import my_ckey, change_my_name_color, add_disposable, roll
+from cogs.role_events import on_member_update
+from cogs.db_commands import top_play_time, top_balance
 from database import db
 
 intents = discord.Intents.default()

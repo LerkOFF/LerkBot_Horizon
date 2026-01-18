@@ -89,7 +89,7 @@ class CkeyInputModal(discord.ui.Modal):
 
             # Вычисление доступных достижений (не имеющиеся у игрока)
             available_achievements = {
-                ach_id: ach_def.title
+                ach_id: (ach_def.title, ach_def.description)
                 for ach_id, ach_def in catalog_all.items()
                 if ach_id not in current_achievements
             }
@@ -123,14 +123,14 @@ class CkeyInputModal(discord.ui.Modal):
 class AchievementSelectView(discord.ui.View):
     """View с dropdown меню для выбора достижения."""
 
-    def __init__(self, ckey: str, ds_nickname: str, available_achievements: dict[str, str]):
+    def __init__(self, ckey: str, ds_nickname: str, available_achievements: dict[str, tuple[str, str]]):
         """
         Инициализация view.
 
         Args:
             ckey: ckey игрока
             ds_nickname: Discord никнейм игрока
-            available_achievements: словарь {ach_id: title} доступных достижений
+            available_achievements: словарь {ach_id: (title, description)} доступных достижений
         """
         super().__init__(timeout=120)  # View истекает через 120 секунд
         self.ckey = ckey
@@ -147,9 +147,9 @@ class AchievementSelectView(discord.ui.View):
                     discord.SelectOption(
                         label=title,
                         value=ach_id,
-                        description=title[:100]  # Discord ограничение длины описания
+                        description=description[:100] if description else title[:100]  # Discord ограничение длины описания
                     )
-                    for ach_id, title in available_achievements.items()
+                    for ach_id, (title, description) in available_achievements.items()
                 ]
             )
             select.callback = self.on_select
@@ -181,7 +181,8 @@ class AchievementSelectView(discord.ui.View):
             current_achievements = await store.get_player_achievements(self.ckey)
 
             if current_achievements and selected_ach_id in current_achievements:
-                ach_title = self.available_achievements.get(selected_ach_id, selected_ach_id)
+                ach_info = self.available_achievements.get(selected_ach_id)
+                ach_title = ach_info[0] if ach_info else selected_ach_id
                 # Редактируем исходное сообщение с dropdown
                 await interaction.followup.edit_message(
                     interaction.message.id,
@@ -194,7 +195,8 @@ class AchievementSelectView(discord.ui.View):
             success = await store.add_achievement(self.ckey, self.ds_nickname, selected_ach_id)
 
             if success:
-                ach_title = self.available_achievements.get(selected_ach_id, selected_ach_id)
+                ach_info = self.available_achievements.get(selected_ach_id)
+                ach_title = ach_info[0] if ach_info else selected_ach_id
                 # Редактируем исходное сообщение с dropdown, заменяя его на текст о выдаче
                 await interaction.followup.edit_message(
                     interaction.message.id,
@@ -206,7 +208,8 @@ class AchievementSelectView(discord.ui.View):
                     interaction.user
                 )
             else:
-                ach_title = self.available_achievements.get(selected_ach_id, selected_ach_id)
+                ach_info = self.available_achievements.get(selected_ach_id)
+                ach_title = ach_info[0] if ach_info else selected_ach_id
                 # Редактируем исходное сообщение
                 await interaction.followup.edit_message(
                     interaction.message.id,
@@ -509,7 +512,7 @@ async def set_reach(
 
             # Вычисление доступных достижений (не имеющиеся у игрока)
             available_achievements = {
-                ach_id: ach_def.title
+                ach_id: (ach_def.title, ach_def.description)
                 for ach_id, ach_def in catalog_all.items()
                 if ach_id not in current_achievements
             }

@@ -1019,6 +1019,302 @@ class DeleteReachSelectView(discord.ui.View):
             item.disabled = True
 
 
+class EditReachSelectView(discord.ui.View):
+    """View с dropdown меню для выбора достижения для редактирования."""
+
+    def __init__(self, catalog_achievements: dict[str, tuple[str, str]]):
+        """
+        Инициализация view.
+
+        Args:
+            catalog_achievements: словарь {ach_id: (title, description)} всех достижений в каталоге
+        """
+        super().__init__(timeout=120)
+        self.catalog_achievements = catalog_achievements
+
+        # Создание dropdown с достижениями
+        if catalog_achievements:
+            select = discord.ui.Select(
+                placeholder="Выберите достижение для редактирования",
+                min_values=1,
+                max_values=1,
+                options=[
+                    discord.SelectOption(
+                        label=title,
+                        value=ach_id,
+                        description=description[:100] if description else f"ID: {ach_id}"
+                    )
+                    for ach_id, (title, description) in catalog_achievements.items()
+                ]
+            )
+            select.callback = self.on_select
+            self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction):
+        """
+        Обработчик выбора достижения из dropdown.
+
+        Args:
+            interaction: взаимодействие Discord
+        """
+        # Проверка прав (defense-in-depth)
+        user_roles = {role.id for role in interaction.user.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await interaction.response.send_message(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        selected_ach_id = interaction.data['values'][0]
+
+        # Проверяем, существует ли достижение
+        if selected_ach_id not in self.catalog_achievements:
+            await interaction.response.send_message(
+                "Выбранное достижение не найдено в каталоге.",
+                ephemeral=True
+            )
+            return
+
+        title, description = self.catalog_achievements[selected_ach_id]
+
+        # Открываем модальное окно с предзаполненными данными
+        modal = EditReachModal(selected_ach_id, title, description)
+        await interaction.response.send_modal(modal)
+
+    async def on_timeout(self):
+        """Обработчик истечения времени ожидания."""
+        for item in self.children:
+            item.disabled = True
+
+
+class EditReachModal(discord.ui.Modal):
+    """Модальное окно для редактирования достижения в каталоге (reachs.txt)."""
+
+    def __init__(self, ach_id: str, current_title: str, current_description: str):
+        """
+        Инициализация модального окна.
+
+        Args:
+            ach_id: ID достижения (нельзя редактировать)
+            current_title: текущее название
+            current_description: текущее описание
+        """
+        super().__init__(title="Редактирование достижения")
+        self.ach_id = ach_id
+
+        # ID достижения (только для отображения, редактируется, но значение игнорируется)
+        self.ach_id_input = discord.ui.InputText(
+            label="ID достижения (нельзя изменить)",
+            placeholder=ach_id,
+            value=ach_id,
+            min_length=1,
+            max_length=50,
+            required=False
+        )
+        self.add_item(self.ach_id_input)
+
+        self.ach_title_input = discord.ui.InputText(
+            label="Название достижения",
+            placeholder="Например: Первая кровь",
+            value=current_title,
+            min_length=1,
+            max_length=200
+        )
+        self.add_item(self.ach_title_input)
+
+        self.ach_description_input = discord.ui.InputText(
+            label="Описание достижения",
+            placeholder="Например: Убей 1 живность",
+            value=current_description,
+            min_length=1,
+            max_length=500,
+            style=discord.InputTextStyle.long
+        )
+        self.add_item(self.ach_description_input)
+
+    async def callback(self, interaction: discord.Interaction):
+        """
+        Обработчик отправки модального окна.
+
+        Args:
+            interaction: взаимодействие Discord
+        """
+        # Проверка прав (defense-in-depth)
+        user_roles = {role.id for role in interaction.user.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await interaction.response.send_message(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        # Получение и нормализация значений
+        # ID не меняется, используем сохраненный
+        title = self.ach_title_input.value.strip()
+        description = self.ach_description_input.value.strip()
+
+        # Валидация
+        if not title:
+            await interaction.response.send_message(
+                "Название достижения не может быть пустым.",
+                ephemeral=True
+            )
+            return
+
+        if not description:
+            await interaction.response.send_message(
+                "Описание достижения не может быть пустым.",
+                ephemeral=True
+            )
+            return
+
+        # Проверяем, существует ли достижение
+        if not catalog.exists(self.ach_id):
+            await interaction.response.send_message(
+                f"Достижение с ID '{self.ach_id}' не найдено в каталоге.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            # Откладываем ответ для выполнения асинхронных операций
+            await interaction.response.defer(ephemeral=True)
+
+            catalog_path = Path(ACHIEVEMENTS_CATALOG_PATH)
+
+            if not catalog_path.exists():
+                await interaction.followup.send(
+                    "Файл каталога достижений не найден.",
+                    ephemeral=True
+                )
+                return
+
+            # Читаем все строки из файла
+            with open(catalog_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            # Обновляем строку с редактируемым достижением
+            updated_lines = []
+            found = False
+            for line in lines:
+                line_stripped = line.strip()
+                # Игнорируем пустые строки и комментарии - сохраняем как есть
+                if not line_stripped or line_stripped.startswith('#'):
+                    updated_lines.append(line)
+                    continue
+
+                # Парсим строку формата: id|title|description
+                parts = line_stripped.split('|')
+                if len(parts) >= 1:
+                    line_ach_id = parts[0].strip().lower()
+                    if line_ach_id == self.ach_id.lower():
+                        # Заменяем эту строку новой
+                        new_line = f"{self.ach_id}|{title}|{description}\n"
+                        updated_lines.append(new_line)
+                        found = True
+                        continue
+
+                # Сохраняем строку без изменений
+                updated_lines.append(line)
+
+            if not found:
+                await interaction.followup.send(
+                    f"Достижение с ID '{self.ach_id}' не найдено в файле каталога.",
+                    ephemeral=True
+                )
+                return
+
+            # Атомически записываем обновленный каталог
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                encoding='utf-8',
+                dir=catalog_path.parent,
+                delete=False,
+                suffix='.tmp'
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                temp_file.writelines(updated_lines)
+
+            # Атомически заменяем оригинальный файл
+            temp_path.replace(catalog_path)
+
+            # Перезагружаем каталог
+            catalog.load()
+
+            await interaction.followup.send(
+                f"✅ Достижение **{title}** (ID: `{self.ach_id}`) успешно обновлено в каталоге.",
+                ephemeral=True
+            )
+
+            log_user_action(
+                f'Achievement edited in catalog: {self.ach_id} - {title}',
+                interaction.user
+            )
+
+        except Exception as e:
+            logger.error(f"Ошибка при редактировании достижения в каталоге: {e}")
+            await interaction.followup.send(
+                f"Произошла ошибка при редактировании достижения: {e}",
+                ephemeral=True
+            )
+
+
+async def edit_reachs(ctx: discord.ApplicationContext):
+    """
+    Команда для редактирования достижения в каталоге (reachs.txt) через модальное окно.
+
+    Args:
+        ctx: контекст команды Discord
+    """
+    try:
+        # Проверка прав
+        user_roles = {role.id for role in ctx.author.roles}
+        if not any(role_id in user_roles for role_id in ACHIEVEMENTS_ALLOWED_ROLE_IDS):
+            await ctx.respond(
+                "У вас нет прав на использование этой команды.",
+                ephemeral=True
+            )
+            return
+
+        # Получение всех достижений из каталога
+        catalog_all = catalog.get_all()
+
+        if not catalog_all:
+            await ctx.respond(
+                "Каталог достижений пуст.",
+                ephemeral=True
+            )
+            return
+
+        # Создание словаря для dropdown {ach_id: (title, description)}
+        catalog_achievements = {
+            ach_id: (ach_def.title, ach_def.description)
+            for ach_id, ach_def in catalog_all.items()
+        }
+
+        # Создание view с dropdown меню
+        view = EditReachSelectView(catalog_achievements)
+
+        await ctx.respond(
+            "Выберите достижение для редактирования:",
+            view=view,
+            ephemeral=True
+        )
+
+        log_user_action('Edit reachs command initiated', ctx.author)
+
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении команды edit_reachs: {e}")
+        try:
+            await ctx.respond(
+                "Произошла ошибка при запуске команды. Пожалуйста, попробуйте позже.",
+                ephemeral=True
+            )
+        except Exception:
+            pass
+
+
 async def delete_reachs(ctx: discord.ApplicationContext):
     """
     Команда для удаления достижения из каталога (reachs.txt) через dropdown меню.

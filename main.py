@@ -56,7 +56,7 @@ bot.slash_command(
 )(top_play_time)
 bot.slash_command(
     name='top_balance',
-    description='Показать топ-10 игроков по банковскому балансу.',
+    description='Показать всех игроков по балансу (пагинация по 10, кнопки Назад/Вперёд).',
     guild_ids=GUILD_IDS
 )(top_balance)
 bot.slash_command(

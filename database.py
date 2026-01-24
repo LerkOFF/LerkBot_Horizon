@@ -66,12 +66,42 @@ class SS14Database:
             logger.error(f"Ошибка при получении топа игроков: {e}")
             raise
 
-    async def get_top_players_by_balance(self, limit: int = 10):
+    async def get_top_players_by_balance_count(self) -> int:
         """
-        Получить топ игроков по балансу банковского счета.
+        Получить общее количество игроков с балансом (для пагинации).
+
+        Returns:
+            Количество записей в топе по балансу.
+        """
+        if not self.pool:
+            raise RuntimeError("База данных не подключена. Вызовите connect() перед использованием.")
+
+        query = """
+            WITH ranked_balances AS (
+                SELECT p.user_id,
+                       ROW_NUMBER() OVER (PARTITION BY p.user_id ORDER BY prof.bank_balance DESC) AS rn
+                FROM profile prof
+                INNER JOIN preference pref ON prof.preference_id = pref.preference_id
+                INNER JOIN player p ON pref.user_id::text::uuid = p.user_id
+                WHERE prof.bank_balance IS NOT NULL
+            )
+            SELECT COUNT(*)::int AS cnt FROM ranked_balances WHERE rn = 1
+        """
+        try:
+            async with self.pool.acquire() as connection:
+                row = await connection.fetchrow(query)
+                return row["cnt"] if row else 0
+        except Exception as e:
+            logger.error(f"Ошибка при подсчёте игроков по балансу: {e}")
+            raise
+
+    async def get_top_players_by_balance(self, limit: int = 10, offset: int = 0):
+        """
+        Получить топ игроков по балансу банковского счета (с пагинацией).
 
         Args:
-            limit: количество игроков в топе (по умолчанию 10)
+            limit: количество записей на странице (по умолчанию 10)
+            offset: смещение для пагинации (по умолчанию 0)
 
         Returns:
             Список кортежей (user_name, char_name, bank_balance)
@@ -94,12 +124,11 @@ class SS14Database:
             FROM ranked_balances
             WHERE rn = 1
             ORDER BY bank_balance DESC
-            LIMIT $1
+            LIMIT $1 OFFSET $2
         """
-
         try:
             async with self.pool.acquire() as connection:
-                rows = await connection.fetch(query, limit)
+                rows = await connection.fetch(query, limit, offset)
                 return rows
         except Exception as e:
             logger.error(f"Ошибка при получении топа игроков по балансу: {e}")

@@ -76,6 +76,11 @@ async def _remove_sponsor_from_file(username: str) -> None:
             # Атомарная запись через временный файл
             temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(SPONSORS_FILE_PATH), text=True)
             try:
+                # mkstemp создаёт файл с правами 0600. После os.replace этот inode
+                # становится рабочим sponsor-файлом, который SS14 читает под UID 1000.
+                # Выставляем права до replace, чтобы атомарное обновление не ломало
+                # доступ сервера после rebuild или удаления спонсорской роли.
+                os.fchmod(temp_fd, 0o664)
                 with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
                     f.writelines(filtered_lines)
                 os.replace(temp_path, SPONSORS_FILE_PATH)

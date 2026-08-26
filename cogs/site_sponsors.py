@@ -1,4 +1,4 @@
-"""Pull active/revoked site sponsors from ss14.рф. Does not replace the Boosty role flow."""
+"""Pull site sponsors from ss14.рф and push current Boosty role holders back. Does not replace the Boosty role flow."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ import discord
 from discord.ext import tasks
 
 from cogs import role_events
-from config import GUILD_IDS, SITE_DONATE_URL, SITE_SPONSORS_URL, SPONSOR_SYNC_TOKEN, TRACKED_ROLES
-from services.sponsors_file import remove_sponsor, upsert_sponsor
+from config import BOOSTY_ROLE_ID, GUILD_IDS, SITE_DONATE_URL, SITE_SPONSORS_URL, SPONSOR_SYNC_TOKEN, TRACKED_ROLES
+from services.sponsors_file import read_lines, remove_sponsor, upsert_sponsor
 from utils.logger import log_user_action
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def _int_id(value: object) -> int | None:
 
 
 class SiteSponsorSync:
-    """Periodic HTTPS pull of site-paid sponsors. Missing env keeps Boosty-only bots running."""
+    """Periodic HTTPS pull of site-paid sponsors and push of Boosty members. Missing env keeps Boosty-only bots running."""
 
     def __init__(self, bot: discord.Bot):
         self.bot = bot
@@ -51,9 +51,12 @@ class SiteSponsorSync:
 
     async def _run(self) -> None:
         payload = await self._fetch()
-        if payload is None:
-            return
+        if payload is not None:
+            await self._apply_site(payload)
+        await self._push_boosty()
+        await self._push_sponsors_file()
 
+    async def _apply_site(self, payload: dict) -> None:
         active = payload.get("active") or []
         revoked = payload.get("revoked") or []
         if not isinstance(active, list) or not isinstance(revoked, list):
@@ -147,3 +150,107 @@ class SiteSponsorSync:
                 logger.warning("Не удалось отправить DM об отзыве сайта пользователю %s", member.name)
         if username:
             await remove_sponsor(username)
+
+    async def _push_boosty(self) -> None:
+        url = _boosty_url()
+        if not url:
+            return
+        members = await self._boosty_members()
+        headers = {"Authorization": f"Bearer {SPONSOR_SYNC_TOKEN}", "Accept": "application/json"}
+        timeout = aiohttp.ClientTimeout(total=20)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.put(url, headers=headers, json={"members": members}) as response:
+                    if response.status != 200:
+                        logger.warning("Сайт Boosty ответил %s", response.status)
+                        return
+            logger.info("На сайт отправлено %s подписчиков Boosty", len(members))
+        except Exception as exc:
+            logger.error("Не удалось отправить подписчиков Boosty: %s", exc)
+
+    async def _push_sponsors_file(self) -> None:
+        url = _sponsors_file_url()
+        if not url:
+            return
+        entries = await self._sponsor_file_entries()
+        headers = {"Authorization": f"Bearer {SPONSOR_SYNC_TOKEN}", "Accept": "application/json"}
+        timeout = aiohttp.ClientTimeout(total=20)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.put(url, headers=headers, json={"entries": entries}) as response:
+                    if response.status != 200:
+                        logger.warning("Сайт файла спонсоров ответил %s", response.status)
+                        return
+            logger.info("На сайт отправлено %s строк файла спонсоров", len(entries))
+        except Exception as exc:
+            logger.error("Не удалось отправить файл спонсоров: %s", exc)
+
+    async def _sponsor_file_entries(self) -> list[dict]:
+        lines = await read_lines()
+        entries: list[dict] = []
+        seen: set[str] = set()
+        for line in lines:
+            parts = [part.strip() for part in line.strip().split(",")]
+            if not parts or not parts[0]:
+                continue
+            username = parts[0]
+            if username in seen:
+                continue
+            seen.add(username)
+            ckey = parts[1] if len(parts) > 1 else ""
+            role_id = parts[2] if len(parts) > 2 else None
+            color = parts[4] if len(parts) > 4 else None
+            entries.append({
+                "username": username,
+                "ckey": ckey or None,
+                "role_id": role_id,
+                "color": color,
+            })
+        return entries
+
+    async def _boosty_members(self) -> list[dict]:
+        seen: dict[str, dict] = {}
+        for guild in self.bot.guilds:
+            if guild.id not in GUILD_IDS:
+                continue
+            if not guild.chunked:
+                try:
+                    await guild.chunk()
+                except Exception as exc:
+                    logger.warning("Не удалось загрузить участников %s: %s", guild.name, exc)
+            role = guild.get_role(BOOSTY_ROLE_ID)
+            if not role:
+                continue
+            for member in role.members:
+                discord_id = str(member.id)
+                if discord_id in seen:
+                    continue
+                tracked = [item for item in member.roles if item.id in TRACKED_ROLES]
+                ordered_ids = [role_id for role_id in TRACKED_ROLES if any(item.id == role_id for item in tracked)]
+                highest = next((item for item in tracked if ordered_ids and item.id == ordered_ids[-1]), None)
+                seen[discord_id] = {
+                    "discord_id": discord_id,
+                    "discord_username": member.name,
+                    "role_ids": [str(item.id) for item in tracked],
+                    "role_name": highest.name if highest else None,
+                }
+        return list(seen.values())
+
+
+def _boosty_url() -> str:
+    url = (SITE_SPONSORS_URL or "").rstrip("/")
+    if not url:
+        return ""
+    if url.endswith("/internal/sponsors"):
+        return url[: -len("sponsors")] + "boosty"
+    return url.rsplit("/", 1)[0] + "/boosty"
+
+
+def _sponsors_file_url() -> str:
+    url = (SITE_SPONSORS_URL or "").rstrip("/")
+    if not url:
+        return ""
+    if url.endswith("/internal/sponsors"):
+        return url[: -len("sponsors")] + "sponsors-file"
+    return url.rsplit("/", 1)[0] + "/sponsors-file"
+

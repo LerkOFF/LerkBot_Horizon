@@ -1,8 +1,8 @@
-from datetime import datetime
 import discord
-from config import CKEY_CHANNEL_ID, SPONSORS_FILE_PATH, CAN_GIVES_ROLES, DISPOSABLE_FILE_PATH
+from config import CKEY_CHANNEL_ID, CAN_GIVES_ROLES, DISPOSABLE_FILE_PATH
 import re
 import random
+from services.sponsors_file import read_lines, update_color, upsert_sponsor
 from utils.logger import log_user_action
 from utils.utils import get_sponsor_roles
 
@@ -75,21 +75,6 @@ def update_disposable_file(old_ckey: str, new_ckey: str) -> None:
         f.writelines(updated_lines)
 
 
-def read_sponsors_file() -> list[str]:
-    """Прочитать файл спонсоров."""
-    try:
-        with open(SPONSORS_FILE_PATH, 'r', encoding='utf-8') as f:
-            return f.readlines()
-    except FileNotFoundError:
-        return []
-
-
-def write_sponsors_file(lines: list[str]) -> None:
-    """Записать файл спонсоров."""
-    with open(SPONSORS_FILE_PATH, 'w', encoding='utf-8') as f:
-        f.writelines(lines)
-
-
 async def my_ckey(ctx: discord.ApplicationContext, ckey: discord.Option(str, "Ваш сикей в игре")):
     """Команда для установки сикея пользователя."""
     try:
@@ -105,29 +90,17 @@ async def my_ckey(ctx: discord.ApplicationContext, ckey: discord.Option(str, "В
             return
 
         member = ctx.author
-        time_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        new_record = f"{member.name}, {ckey}, {tracked_roles[0]}, {time_now}, {DEFAULT_COLOR}\n"
-
-        lines = read_sponsors_file()
-
+        lines = await read_lines()
         old_ckey = None
-        updated_lines = []
-        updated = False
-
         for line in lines:
             if line.startswith(f"{member.name},"):
-                old_ckey = line.split(', ')[1]
-                updated_lines.append(new_record)
-                updated = True
-            else:
-                updated_lines.append(line)
+                parts = line.split(', ')
+                if len(parts) >= 2:
+                    old_ckey = parts[1]
+                break
 
-        if not updated:
-            updated_lines.append(new_record)
+        await upsert_sponsor(member.name, ckey, tracked_roles[0], DEFAULT_COLOR)
 
-        write_sponsors_file(updated_lines)
-
-        # Обновление ckey в DISPOSABLE_FILE_PATH, если найден старый
         if old_ckey:
             update_disposable_file(old_ckey, ckey)
 
@@ -153,36 +126,12 @@ async def change_my_name_color(ctx: discord.ApplicationContext, color_hex: disco
         if await check_is_sponsor(ctx) is None:
             return
 
-        member = ctx.author
-        lines = read_sponsors_file()
-
-        if not lines:
-            await ctx.respond("Файл спонсоров не найден. Пожалуйста, сначала используйте команду /my_ckey.", ephemeral=True)
-            return
-
-        sponsor_found = False
-        updated_lines = []
-
-        for line in lines:
-            if line.startswith(f"{member.name},"):
-                sponsor_found = True
-                parts = line.strip().split(', ')
-                if len(parts) >= 5:
-                    parts[4] = color_hex
-                else:
-                    parts.append(color_hex)
-                updated_lines.append(', '.join(parts) + '\n')
-            else:
-                updated_lines.append(line)
-
-        if not sponsor_found:
+        if not await update_color(ctx.author.name, color_hex):
             await ctx.respond("Ваша запись не найдена. Пожалуйста, сначала используйте команду /my_ckey.", ephemeral=True)
             return
 
-        write_sponsors_file(updated_lines)
-
         await ctx.respond(f"Цвет вашего имени успешно изменён на {color_hex}.")
-        log_user_action(f'Change color command used: {color_hex}', member)
+        log_user_action(f'Change color command used: {color_hex}', ctx.author)
 
     except Exception as e:
         await ctx.respond(f"Произошла ошибка при изменении цвета имени: {e}", ephemeral=True)
@@ -203,7 +152,7 @@ async def add_disposable(
 
         # Поиск ckey по ds_nickname в SPONSORS_FILE_PATH
         ckey = None
-        lines = read_sponsors_file()
+        lines = await read_lines()
         for line in lines:
             parts = line.split(', ')
             if parts[0] == ds_nickname:

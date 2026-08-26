@@ -1,16 +1,14 @@
 import discord
-import asyncio
 import logging
-import os
-import tempfile
-from config import TRACKED_ROLES, INFO_CHANNEL_ID, SPONSORS_FILE_PATH, CKEY_CHANNEL_ID
+from config import TRACKED_ROLES, INFO_CHANNEL_ID, CKEY_CHANNEL_ID
+from services.sponsors_file import remove_sponsor
 from utils.logger import log_user_action
 from utils.utils import manage_boosty_role
 
 logger = logging.getLogger(__name__)
 
-# Блокировка для безопасной записи в файл спонсоров
-_sponsors_file_lock = asyncio.Lock()
+# While the site sync cog changes roles, skip Boosty DMs and file writes from this handler.
+skip_role_events = False
 
 
 async def _handle_role_added(member: discord.Member, role: discord.Role) -> None:
@@ -50,7 +48,7 @@ async def _handle_role_removed(member: discord.Member, role: discord.Role) -> No
             await info_channel.send(f"{member.mention}, Ваша подписка закончилась.")
 
     # Удаление из файла спонсоров
-    await _remove_sponsor_from_file(member.name)
+    await remove_sponsor(member.name)
 
     # Удаление роли BOOSTY
     if await manage_boosty_role(member, add=False):
@@ -59,45 +57,11 @@ async def _handle_role_removed(member: discord.Member, role: discord.Role) -> No
     log_user_action(f"Role removed: {role.id}", member)
 
 
-async def _remove_sponsor_from_file(username: str) -> None:
-    """Атомарное удаление пользователя из файла спонсоров."""
-    async with _sponsors_file_lock:
-        try:
-            try:
-                with open(SPONSORS_FILE_PATH, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-            except FileNotFoundError:
-                logger.warning(f"Файл спонсоров {SPONSORS_FILE_PATH} не найден")
-                return
-
-            # Фильтрация строк (удаление пользователя)
-            filtered_lines = [line for line in lines if not line.startswith(f"{username},")]
-
-            # Атомарная запись через временный файл
-            temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(SPONSORS_FILE_PATH), text=True)
-            try:
-                # mkstemp создаёт файл с правами 0600. После os.replace этот inode
-                # становится рабочим sponsor-файлом, который SS14 читает под UID 1000.
-                # Выставляем права до replace, чтобы атомарное обновление не ломало
-                # доступ сервера после rebuild или удаления спонсорской роли.
-                os.fchmod(temp_fd, 0o664)
-                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
-                    f.writelines(filtered_lines)
-                os.replace(temp_path, SPONSORS_FILE_PATH)
-                logger.info(f"Пользователь {username} удалён из файла спонсоров")
-            except Exception as e:
-                logger.error(f"Ошибка при записи файла спонсоров: {e}")
-                try:
-                    os.unlink(temp_path)
-                except OSError:
-                    pass
-
-        except Exception as e:
-            logger.error(f"Ошибка при обработке файла спонсоров: {e}")
-
-
 async def on_member_update(before: discord.Member, after: discord.Member) -> None:
     """Обработчик события изменения ролей участника."""
+    if skip_role_events:
+        return
+
     # Проверка добавленных ролей
     added_roles = set(after.roles) - set(before.roles)
     added_tracked = [role for role in added_roles if role.id in TRACKED_ROLES]

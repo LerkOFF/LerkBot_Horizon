@@ -68,3 +68,8 @@ SS14_DB_PASSWORD = _get_env('DB_PASSWORD')
 ACHIEVEMENTS_CATALOG_PATH = _get_env_optional('ACHIEVEMENTS_CATALOG_PATH', 'data/reachs.txt')
 PLAYERS_ACHIEVEMENTS_PATH = _get_env_optional('PLAYERS_ACHIEVEMENTS_PATH', 'data/players_reachs.txt')
 ACHIEVEMENTS_ALLOWED_ROLE_IDS = _get_env_list_int('ACHIEVEMENTS_ALLOWED_ROLE_IDS')
+
+# Optional HTTPS pull from ss14.рф. Empty values keep Boosty-only bots running.
+SITE_SPONSORS_URL = _get_env_optional('SITE_SPONSORS_URL')
+SPONSOR_SYNC_TOKEN = _get_env_optional('SPONSOR_SYNC_TOKEN')
+SITE_DONATE_URL = _get_env_optional('SITE_DONATE_URL', 'https://сс14.рф/donate')

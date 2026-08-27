@@ -419,23 +419,58 @@ def _tag(thread: discord.Thread) -> str | None:
 
 def _pack_message(message: discord.Message) -> dict[str, Any]:
     author = message.author
+    content = message.content or ""
+    attachments = [
+        {
+            "url": attachment.url,
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+        }
+        for attachment in message.attachments
+    ]
+    if not _body_has_gif_page(content):
+        seen = {item["url"] for item in attachments}
+        for embed in message.embeds:
+            url = _embed_media_url(embed)
+            if url is None or url in seen:
+                continue
+            seen.add(url)
+            attachments.append(_embed_attachment(url))
     return {
         "discord_message_id": str(message.id),
         "discord_id": str(author.id),
         "discord_username": author.name,
         "display_name": getattr(author, "display_name", None) or author.name,
-        "body": message.content or "",
+        "body": content,
         "created_at": message.created_at.isoformat(),
         "mentions": _mentions(message),
-        "attachments": [
-            {
-                "url": attachment.url,
-                "filename": attachment.filename,
-                "content_type": attachment.content_type,
-            }
-            for attachment in message.attachments
-        ],
+        "attachments": attachments,
     }
+
+
+def _body_has_gif_page(content: str) -> bool:
+    lower = content.lower()
+    return "tenor.com/view/" in lower or "tenor.com/embed/" in lower or "giphy.com/gifs/" in lower
+
+
+def _embed_media_url(embed: discord.Embed) -> str | None:
+    for attr in ("image", "thumbnail", "video"):
+        part = getattr(embed, attr, None)
+        url = getattr(part, "url", None) if part is not None else None
+        if isinstance(url, str) and url.startswith("https://"):
+            return url
+    return None
+
+
+def _embed_attachment(url: str) -> dict[str, str]:
+    path = url.split("?", 1)[0].lower()
+    if path.endswith(".mp4"):
+        return {"url": url, "filename": "gif.mp4", "content_type": "video/mp4"}
+    if path.endswith(".webm"):
+        return {"url": url, "filename": "gif.webm", "content_type": "video/webm"}
+    if path.endswith(".webp"):
+        return {"url": url, "filename": "gif.webp", "content_type": "image/webp"}
+    return {"url": url, "filename": "gif.gif", "content_type": "image/gif"}
 
 
 def _mentions(message: discord.Message) -> dict[str, str]:

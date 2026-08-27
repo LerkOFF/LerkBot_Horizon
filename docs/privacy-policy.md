@@ -7,7 +7,7 @@ Your privacy is important to us. This Privacy Policy explains how we collect, us
 When you interact with the Bot, we may collect and store the following information:
 
 - **Discord User ID**: Your unique Discord identifier.
-- **Messages**: Content of messages you send to the Bot.
+- **Messages**: Content of messages you send to the Bot. Public posts from mapped forum channels are copied to ss14.рф; posts written on the site in those boards are copied back to Discord.
 - **Roles and Permissions**: Information about your roles and permissions within the Discord server.
 
 We collect this information to provide the Bot's functionality and improve user experience.

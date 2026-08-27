@@ -5,6 +5,7 @@ from cogs.role_events import on_member_update
 from cogs.db_commands import top_play_time, top_balance
 from cogs.achievements import get_reachs, set_reach, remove_reach, add_reachs, edit_reachs, delete_reachs
 from cogs.site_sponsors import SiteSponsorSync
+from cogs.forum_sync import bind as bind_forum_sync, import_forums
 from database import db
 from services.achievements_catalog import catalog
 from services.server_status import ServerStatusMonitor
@@ -12,10 +13,12 @@ from services.server_status import ServerStatusMonitor
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
+intents.message_content = True
 
 bot = discord.Bot(intents=intents)
 site_sponsor_sync = SiteSponsorSync(bot)
 server_status_monitor = ServerStatusMonitor(bot)
+forum_sync = bind_forum_sync(bot)
 
 
 @bot.event
@@ -33,6 +36,7 @@ async def on_ready():
 
     site_sponsor_sync.start()
     server_status_monitor.start()
+    forum_sync.start()
 
     for guild in bot.guilds:
         print(f'Бот подключен к серверу: {guild.name}')
@@ -43,6 +47,7 @@ async def on_close():
     """Закрытие соединения с БД при выключении бота."""
     site_sponsor_sync.stop()
     server_status_monitor.stop()
+    forum_sync.stop()
     await db.disconnect()
     print('База данных отключена')
 
@@ -103,6 +108,11 @@ bot.slash_command(
     description='Удалить достижение из каталога через dropdown меню (требуются права).',
     guild_ids=GUILD_IDS
 )(delete_reachs)
+bot.slash_command(
+    name='import_forums',
+    description='Залить историю Discord-форумов на сс14.рф (админ или CAN_GIVES_ROLES).',
+    guild_ids=GUILD_IDS
+)(import_forums)
 
 
 bot.event(on_member_update)

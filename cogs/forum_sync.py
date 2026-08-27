@@ -288,8 +288,12 @@ class ForumSync:
         return channel
 
     async def _put(self, payload: dict[str, Any]) -> bool:
+        payload.setdefault("emojis", _guild_emojis(self._primary_guild()))
         result = await self._request("PUT", _forum_import_url(), json=payload)
         return result is not None
+
+    def _primary_guild(self) -> discord.Guild | None:
+        return self.bot.guilds[0] if self.bot.guilds else None
 
     async def _request(
         self,
@@ -394,6 +398,22 @@ def _forum_thread(channel: discord.abc.Messageable) -> discord.Thread | None:
     if isinstance(channel, discord.Thread) and channel.parent_id in FORUM_CHANNEL_IDS:
         return channel
     return None
+
+
+def _guild_emojis(guild: discord.Guild | None) -> list[dict[str, Any]]:
+    if guild is None:
+        return []
+    packed: list[dict[str, Any]] = []
+    for emoji in guild.emojis:
+        name = getattr(emoji, "name", None)
+        if not isinstance(name, str) or not name:
+            continue
+        packed.append({
+            "name": name,
+            "id": str(emoji.id),
+            "animated": bool(getattr(emoji, "animated", False)),
+        })
+    return packed
 
 
 def _thread_meta(thread: discord.Thread) -> dict[str, Any]:

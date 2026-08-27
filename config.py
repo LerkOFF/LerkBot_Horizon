@@ -73,3 +73,7 @@ ACHIEVEMENTS_ALLOWED_ROLE_IDS = _get_env_list_int('ACHIEVEMENTS_ALLOWED_ROLE_IDS
 SITE_SPONSORS_URL = _get_env_optional('SITE_SPONSORS_URL')
 SPONSOR_SYNC_TOKEN = _get_env_optional('SPONSOR_SYNC_TOKEN')
 SITE_DONATE_URL = _get_env_optional('SITE_DONATE_URL', 'https://сс14.рф/donate')
+
+# SS14 server status channel. Defaults match the production StarHorizon server.
+SS14_STATUS_URL = _get_env_optional('SS14_STATUS_URL', 'http://ss14.starhorizon.ru:1212/status')
+SS14_STATUS_CHANNEL_ID = int(_get_env_optional('SS14_STATUS_CHANNEL_ID', '1349094379465478164'))

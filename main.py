@@ -7,6 +7,7 @@ from cogs.achievements import get_reachs, set_reach, remove_reach, add_reachs, e
 from cogs.site_sponsors import SiteSponsorSync
 from database import db
 from services.achievements_catalog import catalog
+from services.server_status import ServerStatusMonitor
 
 intents = discord.Intents.default()
 intents.members = True
@@ -14,6 +15,7 @@ intents.guilds = True
 
 bot = discord.Bot(intents=intents)
 site_sponsor_sync = SiteSponsorSync(bot)
+server_status_monitor = ServerStatusMonitor(bot)
 
 
 @bot.event
@@ -30,6 +32,7 @@ async def on_ready():
         print(f'Ошибка при загрузке каталога достижений: {e}')
 
     site_sponsor_sync.start()
+    server_status_monitor.start()
 
     for guild in bot.guilds:
         print(f'Бот подключен к серверу: {guild.name}')
@@ -39,6 +42,7 @@ async def on_ready():
 async def on_close():
     """Закрытие соединения с БД при выключении бота."""
     site_sponsor_sync.stop()
+    server_status_monitor.stop()
     await db.disconnect()
     print('База данных отключена')
 

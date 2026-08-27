@@ -50,6 +50,7 @@ class ForumSync:
         self.bot.add_listener(self.on_thread_delete, "on_thread_delete")
         if self._outbox_task is None or self._outbox_task.done():
             self._outbox_task = asyncio.create_task(self._outbox_loop())
+        asyncio.create_task(self._push_emojis())
         logger.info("Зеркало форума включено")
 
     def stop(self) -> None:
@@ -292,6 +293,43 @@ class ForumSync:
         result = await self._request("PUT", _forum_import_url(), json=payload)
         return result is not None
 
+    async def _push_emojis(self) -> None:
+        url = _forum_emojis_url()
+        packed = await self._guild_emojis_fresh()
+        if not url:
+            return
+        if not packed:
+            logger.warning("Каталог эмодзи форума пуст: у гильдии нет кастомных эмодзи")
+            return
+        result = await self._request("PUT", url, json={"emojis": packed})
+        if result is None:
+            logger.warning("Сайт не принял каталог эмодзи форума")
+            return
+        logger.info("Каталог эмодзи форума: %s", result.get("count", len(packed)))
+
+    async def _guild_emojis_fresh(self) -> list[dict[str, Any]]:
+        guild = self._primary_guild()
+        packed = _guild_emojis(guild)
+        if packed or guild is None:
+            return packed
+        fetch = getattr(guild, "fetch_emojis", None)
+        if not callable(fetch):
+            return packed
+        try:
+            fetched = await fetch()
+        except discord.HTTPException as exc:
+            logger.warning("Не удалось получить эмодзи гильдии: %s", exc)
+            return []
+        return [
+            {
+                "name": emoji.name,
+                "id": str(emoji.id),
+                "animated": bool(getattr(emoji, "animated", False)),
+            }
+            for emoji in fetched
+            if isinstance(getattr(emoji, "name", None), str) and emoji.name
+        ]
+
     def _primary_guild(self) -> discord.Guild | None:
         return self.bot.guilds[0] if self.bot.guilds else None
 
@@ -352,6 +390,10 @@ def bind(bot: discord.Bot) -> ForumSync:
 
 def _forum_import_url() -> str:
     return _site_internal_url("forum-import")
+
+
+def _forum_emojis_url() -> str:
+    return _site_internal_url("forum-emojis")
 
 
 def _forum_outbox_url() -> str:

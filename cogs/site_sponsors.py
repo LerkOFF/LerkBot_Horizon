@@ -55,6 +55,7 @@ class SiteSponsorSync:
             await self._apply_site(payload)
         await self._push_boosty()
         await self._push_sponsors_file()
+        await self._push_members()
 
     async def _apply_site(self, payload: dict) -> None:
         active = payload.get("active") or []
@@ -185,6 +186,42 @@ class SiteSponsorSync:
         except Exception as exc:
             logger.error("Не удалось отправить файл спонсоров: %s", exc)
 
+    async def _push_members(self) -> None:
+        url = _members_url()
+        if not url:
+            return
+        discord_ids = await self._all_member_ids()
+        if not discord_ids:
+            logger.warning("Список участников гильдии пуст, пропускаю синхронизацию плашки StarHorizon")
+            return
+        headers = {"Authorization": f"Bearer {SPONSOR_SYNC_TOKEN}", "Accept": "application/json"}
+        timeout = aiohttp.ClientTimeout(total=30)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.put(url, headers=headers, json={"discord_ids": discord_ids}) as response:
+                    if response.status != 200:
+                        logger.warning("Сайт участников гильдии ответил %s", response.status)
+                        return
+            logger.info("На сайт отправлено %s участников гильдии", len(discord_ids))
+        except Exception as exc:
+            logger.error("Не удалось отправить участников гильдии: %s", exc)
+
+    async def _all_member_ids(self) -> list[str]:
+        seen: set[str] = set()
+        for guild in self.bot.guilds:
+            if guild.id not in GUILD_IDS:
+                continue
+            if not guild.chunked:
+                try:
+                    await guild.chunk()
+                except Exception as exc:
+                    logger.warning("Не удалось загрузить участников %s: %s", guild.name, exc)
+            for member in guild.members:
+                if member.bot:
+                    continue
+                seen.add(str(member.id))
+        return list(seen)
+
     async def _sponsor_file_entries(self) -> list[dict]:
         lines = await read_lines()
         entries: list[dict] = []
@@ -253,4 +290,13 @@ def _sponsors_file_url() -> str:
     if url.endswith("/internal/sponsors"):
         return url[: -len("sponsors")] + "sponsors-file"
     return url.rsplit("/", 1)[0] + "/sponsors-file"
+
+
+def _members_url() -> str:
+    url = (SITE_SPONSORS_URL or "").rstrip("/")
+    if not url:
+        return ""
+    if url.endswith("/internal/sponsors"):
+        return url[: -len("sponsors")] + "discord-members"
+    return url.rsplit("/", 1)[0] + "/discord-members"
 

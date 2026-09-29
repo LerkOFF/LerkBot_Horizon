@@ -7,9 +7,11 @@
 - `scripts/ss14-relay-tunnel.sh` определяет шлюз Docker-сети `starhorizon_bot_default` и пробрасывает через `de-roma` локальные TCP-порты `15433` → `37.230.118.119:5433` и `11212` → `37.230.118.119:1212`.
 - `deploy/ss14-relay-tunnel.service` держит туннель запущенным через systemd и восстанавливает его после обрыва. Если Docker-сеть ещё не создана при загрузке, сервис повторяет запуск.
 - В production `.env` бота: `DB_HOST` — адрес шлюза Docker-сети, `DB_PORT=15433`, `SS14_STATUS_URL=http://<шлюз>:11212/status`.
-- UFW на `zurih` пропускает к двум портам туннеля только контейнер бота из сети `starhorizon_bot_default`.
+- UFW на `zurih` пропускает к двум портам туннеля только сеть `starhorizon_bot_default` (`172.21.0.0/16` на текущем хосте); к этой сети сейчас подключён только контейнер бота.
 - Публичный ключ хоста бота на `de-roma` ограничен пересылкой к портам `22`, `1212` и `5433` игрового хоста. Порт `22` нужен для SSHFS sponsor-каталога. Ключ не разрешает запуск команд на `de-roma`.
 - SSHFS `warp` монтируется с `ProxyJump=root@82.26.150.155`, затем bind-mount передаёт каталог в контейнер.
+
+SSHFS остаётся runtime mount. После перезагрузки `zurih` его нужно восстановить до пересоздания контейнера; текущий systemd-сервис автоматически поднимает только туннель БД и status API.
 
 ## Установка на `zurih`
 
@@ -22,6 +24,8 @@ systemctl enable --now ss14-relay-tunnel.service
 ```
 
 При смене Docker-шлюза обновить адрес в `.env` и UFW-правила. Значения секретных переменных не выводить и не переносить в Git.
+
+В `/root/.ssh/config` на `zurih` для `Host starhorizon2` задан `ProxyJump root@82.26.150.155`. SSHFS монтируется с опциями `rw,nosuid,nodev,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3`; при ручном восстановлении проверять `stat` файла на хосте и в контейнере. Сервис `ss14-relay-tunnel` можно перезапустить через `systemctl restart ss14-relay-tunnel.service` без перезапуска бота.
 
 ## Проверка
 

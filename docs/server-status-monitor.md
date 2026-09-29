@@ -13,6 +13,8 @@
 
 Настройки можно переопределить через `SS14_STATUS_URL` и `SS14_STATUS_CHANNEL_ID` в `.env`. Секреты в репозиторий не добавляются.
 
+На production status API доступен через SSH-туннель, описанный в [сетевом маршруте](relay-network.md). При таймаутах проверить туннель до изменения логики монитора.
+
 ## Выкладка и проверка
 
 Код хранится в GitHub-репозитории `LerkOFF/LerkBot_Horizon`. Production checkout на сервере `zurih` — `/opt/starhorizon_bot`, контейнер — `starhorizon-bot`.

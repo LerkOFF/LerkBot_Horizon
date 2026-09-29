@@ -1,0 +1,14 @@
+[Unit]
+Description=SS14 database and status relay for LERK Bot
+Wants=network-online.target
+After=network-online.target docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bash /opt/starhorizon_bot/scripts/ss14-relay-tunnel.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

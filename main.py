@@ -1,3 +1,6 @@
+import asyncio
+import logging
+
 import discord
 from config import TOKEN, GUILD_IDS
 from cogs.user_commands import my_ckey, change_my_name_color, add_disposable, roll
@@ -19,13 +22,35 @@ bot = discord.Bot(intents=intents)
 site_sponsor_sync = SiteSponsorSync(bot)
 server_status_monitor = ServerStatusMonitor(bot)
 forum_sync = bind_forum_sync(bot)
+logger = logging.getLogger(__name__)
+db_connect_task: asyncio.Task[None] | None = None
+
+
+async def connect_database_with_retry() -> None:
+    while True:
+        try:
+            await db.connect()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Не удалось подключиться к БД SS14: %s. Повтор через 10 секунд", exc)
+            await asyncio.sleep(10)
+        else:
+            logger.info("База данных SS14 подключена")
+            return
 
 
 @bot.event
 async def on_ready():
-    # Подключение к базе данных
-    await db.connect()
-    print('База данных подключена')
+    global db_connect_task
+
+    # Монитор статуса работает и при временной недоступности БД.
+    site_sponsor_sync.start()
+    server_status_monitor.start()
+    forum_sync.start()
+
+    if db.pool is None and (db_connect_task is None or db_connect_task.done()):
+        db_connect_task = asyncio.create_task(connect_database_with_retry())
 
     # Загрузка каталога достижений
     try:
@@ -33,10 +58,6 @@ async def on_ready():
         print(f'Каталог достижений загружен: {len(catalog.get_all())} достижений')
     except Exception as e:
         print(f'Ошибка при загрузке каталога достижений: {e}')
-
-    site_sponsor_sync.start()
-    server_status_monitor.start()
-    forum_sync.start()
 
     for guild in bot.guilds:
         print(f'Бот подключен к серверу: {guild.name}')
@@ -48,6 +69,12 @@ async def on_close():
     site_sponsor_sync.stop()
     server_status_monitor.stop()
     forum_sync.stop()
+    if db_connect_task is not None and not db_connect_task.done():
+        db_connect_task.cancel()
+        try:
+            await db_connect_task
+        except asyncio.CancelledError:
+            pass
     await db.disconnect()
     print('База данных отключена')
 

@@ -13,6 +13,8 @@ class SS14Database:
 
     async def connect(self):
         """Создание пула соединений с базой данных SS14."""
+        if self.pool is not None:
+            return
         try:
             self.pool = await asyncpg.create_pool(
                 host=SS14_DB_HOST,
@@ -33,6 +35,7 @@ class SS14Database:
         """Закрытие пула соединений с базой данных."""
         if self.pool:
             await self.pool.close()
+            self.pool = None
             logger.info("Соединение с БД SS14 закрыто")
 
     async def get_top_players_by_playtime(self, limit: int = 10):

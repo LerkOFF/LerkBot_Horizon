@@ -17,6 +17,6 @@ exec /usr/bin/ssh -N -T \
     -o ConnectTimeout=10 \
     -o ServerAliveInterval=15 \
     -o ServerAliveCountMax=3 \
-    -L "${gateway}:15433:37.230.118.119:5433" \
-    -L "${gateway}:11212:37.230.118.119:1212" \
+    -L "${gateway}:15433:146.0.78.52:5433" \
+    -L "${gateway}:11212:146.0.78.52:1212" \
     root@82.26.150.155
